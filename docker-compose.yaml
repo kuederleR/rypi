@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   ssh-server:
     image: linuxserver/openssh-server:latest
@@ -12,9 +14,6 @@ services:
       - PUBLIC_KEY_FILE=/config/ssh/authorized_keys
     volumes:
       - ./ssh_config:/config
-    # Optional: for direct SSH testing to the container if needed
-    # ports:
-    #   - "2222:2222"
     restart: unless-stopped
 
   ngrok-tunnel:
@@ -27,10 +26,11 @@ services:
       - NGROK_GITHUB_ALLOWED_EMAILS=${NGROK_GITHUB_ALLOWED_EMAILS}
       - NGROK_DEBUG=true
     command:
-      # Use an HTTP tunnel for OAuth
+      # Use an HTTP tunnel and specify your reserved domain
       - "http"
       - "http://ssh-server:2222" # Tunnel to the SSH server container's exposed port
-      - "--oauth=github"          # Enable GitHub OAuth for the HTTP tunnel
+      - "--domain=home.rkuederle.app" # <--- IMPORTANT: Replace with your reserved domain
+      - "--oauth=github"
       # - "--oauth-allow-email=${NGROK_GITHUB_ALLOWED_EMAILS}" # Uncomment if using NGROK_GITHUB_ALLOWED_EMAILS
     depends_on:
       - ssh-server
