@@ -2,6 +2,26 @@
 version: '3.8'
 
 services:
+  # Service for the OpenSSH server
+  ssh-server:
+    image: linuxserver/openssh-server:latest # A multi-arch SSH server image
+    container_name: ssh-server
+    hostname: ssh-server # Assign a hostname for easier reference within the Docker network
+    environment:
+      - PUID=1000 # Your user ID on the Raspberry Pi (run 'id -u' to find it)
+      - PGID=1000 # Your group ID on the Raspberry Pi (run 'id -g' to find it)
+      - TZ=America/New_York # Your timezone (e.g., 'America/New_York')
+      # Enable auto-user creation based on PUID/PGID and manage authorized_keys
+      # - DOCKER_MODS=linuxserver/mods:openssh-server-auto-users
+      - PASSWORD_ACCESS=false # Crucial for security: disable password logins
+      - PUBLIC_KEY_FILE=/config/ssh/authorized_keys # Path to your authorized_keys inside the container
+    volumes:
+      # Mount a local directory to persist SSH configuration and authorized_keys
+      - ./ssh_config:/config
+    # No ports exposed directly from the SSH server to the Pi host,
+    # as ngrok will be handling the public exposure.
+    restart: unless-stopped # Always restart unless explicitly stopped
+
   # Service for the ngrok tunnel
   ngrok-tunnel:
     image: ngrok/ngrok:latest # The official ngrok Docker image
@@ -18,5 +38,8 @@ services:
       - "--remote-addr=3.tcp.ngrok.io:26644"
       # The local address where the ngrok agent will forward traffic inside your Docker network.
       # 'ssh-server' refers to the SSH server service defined above, and '2222' is its SSH port.
-      - "host.docker.internal:22"
+      - "ssh-server:2222"
+    depends_on:
+      # Ensure the SSH server starts before the ngrok tunnel attempts to connect to it.
+      - ssh-server
     restart: unless-stopped # Always restart unless explicitly stopped
