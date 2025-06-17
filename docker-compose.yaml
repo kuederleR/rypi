@@ -1,37 +1,45 @@
+# docker-compose.yml
 version: '3.8'
 
 services:
+  # Service for the OpenSSH server
   ssh-server:
-    image: linuxserver/openssh-server:latest
+    image: linuxserver/openssh-server:latest # A multi-arch SSH server image
     container_name: ssh-server
-    hostname: ssh-server
+    hostname: ssh-server # Assign a hostname for easier reference within the Docker network
     environment:
-      - PUID=1000 # Your user ID on the Raspberry Pi
-      - PGID=1000 # Your group ID on the Raspberry Pi
-      - TZ=Etc/UTC # Your timezone
+      - PUID=1000 # Your user ID on the Raspberry Pi (run 'id -u' to find it)
+      - PGID=1000 # Your group ID on the Raspberry Pi (run 'id -g' to find it)
+      - TZ=Etc/UTC # Your timezone (e.g., 'America/New_York')
+      # Enable auto-user creation based on PUID/PGID and manage authorized_keys
       - DOCKER_MODS=linuxserver/mods:openssh-server-auto-users
-      - PASSWORD_ACCESS=false
-      - PUBLIC_KEY_FILE=/config/ssh/authorized_keys
+      - PASSWORD_ACCESS=false # Crucial for security: disable password logins
+      - PUBLIC_KEY_FILE=/config/ssh/authorized_keys # Path to your authorized_keys inside the container
     volumes:
+      # Mount a local directory to persist SSH configuration and authorized_keys
       - ./ssh_config:/config
-    restart: unless-stopped
+    # No ports exposed directly from the SSH server to the Pi host,
+    # as ngrok will be handling the public exposure.
+    restart: unless-stopped # Always restart unless explicitly stopped
 
+  # Service for the ngrok tunnel
   ngrok-tunnel:
-    image: ngrok/ngrok:latest
+    image: ngrok/ngrok:latest # The official ngrok Docker image
     container_name: ngrok-tunnel
     environment:
+      # Pass the ngrok authtoken from the .env file
       - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
-      - NGROK_GITHUB_CLIENT_ID=${NGROK_GITHUB_CLIENT_ID}
-      - NGROK_GITHUB_CLIENT_SECRET=${NGROK_GITHUB_CLIENT_SECRET}
-      - NGROK_GITHUB_ALLOWED_EMAILS=${NGROK_GITHUB_ALLOWED_EMAILS}
-      - NGROK_DEBUG=true
+      - NGROK_DEBUG=true # Enable debug logging for more verbose output (useful for troubleshooting)
     command:
-      # Use an HTTP tunnel and specify your reserved domain
-      - "http"
-      - "http://ssh-server:2222" # Tunnel to the SSH server container's exposed port
-      - "--domain=home.rkuederle.app" # <--- IMPORTANT: Replace with your reserved domain
-      - "--oauth=github"
-      # - "--oauth-allow-email=${NGROK_GITHUB_ALLOWED_EMAILS}" # Uncomment if using NGROK_GITHUB_ALLOWED_EMAILS
+      # The 'tcp' command establishes a direct TCP tunnel
+      - "tcp"
+      # '--remote-addr' specifies the reserved TCP address ngrok should assign this tunnel to.
+      # Replace '1.tcp.ngrok.io:12345' with YOUR SPECIFIC Reserved TCP Address and Port from ngrok dashboard.
+      - "--remote-addr=3.tcp.ngrok.io:26644"
+      # The local address where the ngrok agent will forward traffic inside your Docker network.
+      # 'ssh-server' refers to the SSH server service defined above, and '2222' is its SSH port.
+      - "ssh-server:2222"
     depends_on:
+      # Ensure the SSH server starts before the ngrok tunnel attempts to connect to it.
       - ssh-server
-    restart: unless-stopped
+    restart: unless-stopped # Always restart unless explicitly stopped
