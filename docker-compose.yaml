@@ -30,6 +30,7 @@ services:
       # Pass the ngrok authtoken from the .env file
       - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
       - NGROK_DEBUG=true # Enable debug logging for more verbose output (useful for troubleshooting)
+    network_mode: "host" # Use host networking to allow ngrok to bind to the same ports as the SSH server
     command:
       # The 'tcp' command establishes a direct TCP tunnel
       - "tcp"
