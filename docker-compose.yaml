@@ -12,7 +12,7 @@ services:
       - PGID=1000 # Your group ID on the Raspberry Pi (run 'id -g' to find it)
       - TZ=Etc/UTC # Your timezone (e.g., 'America/New_York')
       # Enable auto-user creation based on PUID/PGID and manage authorized_keys
-      - DOCKER_MODS=linuxserver/mods:openssh-server-auto-users
+      # - DOCKER_MODS=linuxserver/mods:openssh-server-auto-users
       - PASSWORD_ACCESS=false # Crucial for security: disable password logins
       - PUBLIC_KEY_FILE=/config/ssh/authorized_keys # Path to your authorized_keys inside the container
     volumes:
