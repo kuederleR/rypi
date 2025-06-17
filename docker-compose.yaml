@@ -1,6 +1,6 @@
 services:
   ssh-server:
-    image: linuxserver/openssh-server:latest # A good multi-arch SSH server image
+    image: linuxserver/openssh-server:latest
     container_name: ssh-server
     hostname: ssh-server
     environment:
@@ -8,29 +8,30 @@ services:
       - PGID=1000 # Your group ID on the Raspberry Pi
       - TZ=Etc/UTC # Your timezone
       - DOCKER_MODS=linuxserver/mods:openssh-server-auto-users
-      - PASSWORD_ACCESS=false # Set to true if you want password access (not recommended)
-      - PUBLIC_KEY_FILE=/config/ssh/authorized_keys # Path to your authorized_keys
+      - PASSWORD_ACCESS=false
+      - PUBLIC_KEY_FILE=/config/ssh/authorized_keys
     volumes:
-      - ./ssh_config:/config # Mount a local directory for SSH configuration and authorized_keys
-    ports:
-      - "2222:2222" # Map internal SSH port to a host port (optional, but good for testing)
+      - ./ssh_config:/config
+    # Optional: for direct SSH testing to the container if needed
+    # ports:
+    #   - "2222:2222"
     restart: unless-stopped
 
   ngrok-tunnel:
-    image: ngrok/ngrok:latest # Official ngrok Docker image
+    image: ngrok/ngrok:latest
     container_name: ngrok-tunnel
     environment:
       - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
-      - NGROK_GITHUB_CLIENT_ID=${NGROK_GITHUB_CLIENT_ID} # GitHub OAuth Client ID
-      - NGROK_GITHUB_CLIENT_SECRET=${NGROK_GITHUB_CLIENT_SECRET} # GitHub OAuth Client Secret
-      - NGROK_GITHUB_ALLOWED_EMAILS=${NGROK_GITHUB_ALLOWED_EMAILS} # Comma-separated emails to allow (optional)
-      - NGROK_DEBUG=true # Set to true for more verbose logging
+      - NGROK_GITHUB_CLIENT_ID=${NGROK_GITHUB_CLIENT_ID}
+      - NGROK_GITHUB_CLIENT_SECRET=${NGROK_GITHUB_CLIENT_SECRET}
+      - NGROK_GITHUB_ALLOWED_EMAILS=${NGROK_GITHUB_ALLOWED_EMAILS}
+      - NGROK_DEBUG=true
     command:
-      - "tcp"
-      - "ssh-server:2222" # Tunnel to the SSH server container's exposed port
-      - "--oauth=github" # Enable GitHub OAuth
+      # Use an HTTP tunnel for OAuth
+      - "http"
+      - "http://ssh-server:2222" # Tunnel to the SSH server container's exposed port
+      - "--oauth=github"          # Enable GitHub OAuth for the HTTP tunnel
       # - "--oauth-allow-email=${NGROK_GITHUB_ALLOWED_EMAILS}" # Uncomment if using NGROK_GITHUB_ALLOWED_EMAILS
-      # - "--authtoken=${NGROK_AUTHTOKEN}" # Also possible to define here
     depends_on:
       - ssh-server
     restart: unless-stopped
