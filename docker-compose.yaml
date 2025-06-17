@@ -38,7 +38,7 @@ services:
       - "--remote-addr=3.tcp.ngrok.io:26644"
       # The local address where the ngrok agent will forward traffic inside your Docker network.
       # 'ssh-server' refers to the SSH server service defined above, and '2222' is its SSH port.
-      - "host.docker.internal:22"
+      - "22"
     # depends_on:
     #   # Ensure the SSH server starts before the ngrok tunnel attempts to connect to it.
     #   - ssh-server
