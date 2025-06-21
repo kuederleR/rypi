@@ -1,46 +1,77 @@
-# docker-compose.yml
-version: '3.8'
+version: '3.8' # Use a recent version for Docker Compose
 
 services:
-  # # Service for the OpenSSH server
-  # ssh-server:
-  #   image: linuxserver/openssh-server:latest # A multi-arch SSH server image
-  #   container_name: ssh-server
-  #   hostname: ssh-server # Assign a hostname for easier reference within the Docker network
-  #   environment:
-  #     - PUID=1000 # Your user ID on the Raspberry Pi (run 'id -u' to find it)
-  #     - PGID=1000 # Your group ID on the Raspberry Pi (run 'id -g' to find it)
-  #     - TZ=America/New_York # Your timezone (e.g., 'America/New_York')
-  #     # Enable auto-user creation based on PUID/PGID and manage authorized_keys
-  #     # - DOCKER_MODS=linuxserver/mods:openssh-server-auto-users
-  #     - PASSWORD_ACCESS=false # Crucial for security: disable password logins
-  #     - PUBLIC_KEY_FILE=/config/ssh/authorized_keys # Path to your authorized_keys inside the container
-  #   volumes:
-  #     # Mount a local directory to persist SSH configuration and authorized_keys
-  #     - ./ssh_config:/config
-  #   # No ports exposed directly from the SSH server to the Pi host,
-  #   # as ngrok will be handling the public exposure.
-  #   restart: unless-stopped # Always restart unless explicitly stopped
+  # Your Nextcloud application service (named 'app' as in previous examples)
+  # This service must be defined in this same docker-compose.yml file
+  app:
+    image: nextcloud:latest
+    restart: always
+    volumes:
+      - /mnt/nas_storage/nextcloud_data:/var/www/html/data
+      - /mnt/nas_storage/nextcloud_config:/var/www/html/config
+    environment:
+      - MYSQL_HOST=db # Or POSTGRES_HOST=db
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextclouduser
+      - MYSQL_PASSWORD=your_nextcloud_db_password
+      - NEXTCLOUD_TRUSTED_DOMAINS=your_rpi_ip_address,ngrok_public_http_url_example.ngrok-free.app # You'll need to update this after ngrok gives you the HTTP URL
+    ports:
+      # Expose Nextcloud on a port on the host that ngrok can access, e.g., 8080
+      # Or, if you want ngrok to access it directly within the Docker network, remove this 'ports' section
+      # and have ngrok target 'app:80'. This is generally cleaner.
+      - "8080:80" # Maps container's 80 to host's 8080. If removing, ngrok directly targets 'app:80'.
+    depends_on:
+      - db # Ensure database starts first
 
-  # Service for the ngrok tunnel
-  ngrok-tunnel:
-    image: ngrok/ngrok:latest # The official ngrok Docker image
+  db: # Your database service (MariaDB or PostgreSQL)
+    image: mariadb:10.6
+    restart: always
+    volumes:
+      - /mnt/nas_storage/nextcloud_db:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=your_mysql_root_password
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextclouduser
+      - MYSQL_PASSWORD=your_nextcloud_db_password
+
+  ngrok-tunnel: # Renamed for clarity, but you can keep your original name
+    image: ngrok/ngrok:latest
     container_name: ngrok-tunnel
     environment:
-      # Pass the ngrok authtoken from the .env file
       - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
       - NGROK_DEBUG=true # Enable debug logging for more verbose output (useful for troubleshooting)
-    network_mode: "host" # Use host networking to allow ngrok to bind to the same ports as the SSH server
+    # The 'network_mode' depends on where the services you are tunneling are running.
+    # If SSH is on the host (port 22) AND Nextcloud is also exposed to the host (e.g., port 8080),
+    # then 'host' mode is appropriate for ngrok to access both via localhost.
+    # If Nextcloud 'app' is *only* reachable within the Docker network, and you want ngrok to access it directly,
+    # then you'd switch to the 'default' network (or a custom one) and target 'app:80'.
+    # Given your SSH is 'localhost:22', 'host' mode is likely what you need.
+    network_mode: "host"
     command:
-      # The 'tcp' command establishes a direct TCP tunnel
+      # SSH Tunnel (TCP) - uses your reserved address
       - "tcp"
-      # '--remote-addr' specifies the reserved TCP address ngrok should assign this tunnel to.
-      # Replace '1.tcp.ngrok.io:12345' with YOUR SPECIFIC Reserved TCP Address and Port from ngrok dashboard.
-      - "--remote-addr=3.tcp.ngrok.io:26644"
-      # The local address where the ngrok agent will forward traffic inside your Docker network.
-      # 'ssh-server' refers to the SSH server service defined above, and '2222' is its SSH port.
-      - "localhost:22"
-    # depends_on:
-    #   # Ensure the SSH server starts before the ngrok tunnel attempts to connect to it.
-    #   - ssh-server
-    restart: unless-stopped # Always restart unless explicitly stopped
+      - "--remote-addr=3.tcp.ngrok.io:26644" # YOUR SPECIFIC Reserved TCP Address and Port
+      - "localhost:22" # Local SSH server port
+
+      # Nextcloud Tunnel (HTTP) - ngrok will give you a dynamic public URL on the free plan
+      - "http"
+      # If Nextcloud 'app' is exposed on host port 8080 via `ports: - "8080:80"` in 'app' service:
+      - "localhost:8080"
+      # OR if you prefer ngrok to access 'app' directly within the Docker network (and 'app' has no 'ports' mapping):
+      # Then you would need to change network_mode: "host" on 'ngrok-tunnel' to something like:
+      # networks:
+      #   - default
+      # and change "localhost:8080" to "app:80"
+      # For simplicity with 'network_mode: "host"', we stick to localhost targets.
+    depends_on:
+      # Ensure SSH and Nextcloud services are up before ngrok tries to tunnel them
+      # If ssh-server is not a Docker service, remove it from here.
+      - app # Assuming 'app' is your Nextcloud service
+      # - ssh-server # If your SSH server is also a docker-compose service
+    restart: unless-stopped
+
+# If you use the 'app:80' direct linking for Nextcloud and remove network_mode: "host"
+# from ngrok-tunnel, then you'd need this network definition:
+# networks:
+#   default:
+#     driver: bridge
